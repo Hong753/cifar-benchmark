@@ -1,0 +1,6 @@
+*.pth
+**/__pycache__/
+.spyproject
+.code
+checkpoints
+images
