@@ -2,7 +2,6 @@ import math
 import warnings
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 #----------------------------------------------------------------------------
 
@@ -85,7 +84,7 @@ class Attention(nn.Module):
         q, k, v = qkv.unbind(0)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = F.softmax(attn, dim=-1)
+        attn = torch.softmax(attn, dim=-1)
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, T, C)

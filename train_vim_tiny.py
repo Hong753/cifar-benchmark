@@ -1,11 +1,14 @@
 import os
 import math
 import torch
+import torch.nn as nn
+
+from functools import partial
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from tqdm import tqdm
 
-from models.vit import ViT_Tiny
+from models.vision_mamba import VisionMamba
 
 #----------------------------------------------------------------------------
 # DATA
@@ -98,7 +101,15 @@ def run(data_dir, device_list, batch_size, warmup_epochs, num_epochs):
     train_loader, test_loader = get_loaders(data_dir, loader_kwargs)
     
     # MODEL
-    model = ViT_Tiny(img_size=32, patch_size=2, num_classes=10)
+    model_kwargs = {
+        "img_size": 32,
+        "patch_size": 2,
+        "num_classes": 10,
+        "embed_dim": 192,
+        "depth": 12,
+        "norm_layer": partial(nn.LayerNorm, eps=1e-6),
+    }
+    model = VisionMamba(**model_kwargs)
     
     # CUDA SETTINGS
     torch.backends.cudnn.benchmark = True
@@ -151,7 +162,14 @@ def run(data_dir, device_list, batch_size, warmup_epochs, num_epochs):
 if __name__ == "__main__":
     data_dir = "/workspace/datasets"
     device_list = [0]
-    batch_size = 128
+    batch_size = 64
     warmup_epochs = 5
     num_epochs = 100
     run(data_dir, device_list, batch_size, warmup_epochs, num_epochs)
+    
+    #  batch | 64
+    #  patch | [16, 16]
+    #    acc | 00.00%
+    # params | 1.6M
+    #   VRAM | 6.98 GB
+    #   time | 0 mins

@@ -1,11 +1,14 @@
 import os
 import math
 import torch
+import torch.nn as nn
+
+from functools import partial
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from tqdm import tqdm
 
-from models.vit import ViT_Tiny
+from models.vision_transformer import VisionTransformer
 
 #----------------------------------------------------------------------------
 # DATA
@@ -98,7 +101,18 @@ def run(data_dir, device_list, batch_size, warmup_epochs, num_epochs):
     train_loader, test_loader = get_loaders(data_dir, loader_kwargs)
     
     # MODEL
-    model = ViT_Tiny(img_size=32, patch_size=2, num_classes=10)
+    model_kwargs = {
+        "img_size": 32,
+        "patch_size": 2,
+        "num_classes": 10,
+        "embed_dim": 192,
+        "depth": 12,
+        "num_heads": 3,
+        "mlp_ratio": 4,
+        "qkv_bias": True,
+        "norm_layer": partial(nn.LayerNorm, eps=1e-6),
+    }
+    model = VisionTransformer(**model_kwargs)
     
     # CUDA SETTINGS
     torch.backends.cudnn.benchmark = True
@@ -151,7 +165,13 @@ def run(data_dir, device_list, batch_size, warmup_epochs, num_epochs):
 if __name__ == "__main__":
     data_dir = "/workspace/datasets"
     device_list = [0]
-    batch_size = 128
+    batch_size = 64
     warmup_epochs = 5
     num_epochs = 100
     run(data_dir, device_list, batch_size, warmup_epochs, num_epochs)
+    
+    #  patch | [16, 16]
+    #    acc | 81.10%
+    # params | 5.4M
+    #   VRAM | 12.9 GB
+    #   time | 87 mins
