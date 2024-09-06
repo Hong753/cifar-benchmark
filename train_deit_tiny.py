@@ -17,14 +17,16 @@ def get_loaders(data_dir, loader_kwargs):
     mean = [0.4914, 0.4822, 0.4465]
     std = [0.2470, 0.2435, 0.2616]
     train_transforms = transforms.Compose([
-        transforms.RandomCrop(32, padding=4), 
-        transforms.RandomHorizontalFlip(), 
-        transforms.ToTensor(), 
-        transforms.Normalize(mean, std)
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandAugment(num_ops=3, magnitude=9),
+        transforms.ToTensor(),
+        transforms.Normalize(mean, std),
+        transforms.RandomErasing(),
     ])
     test_transforms = transforms.Compose([
-        transforms.ToTensor(), 
-        transforms.Normalize(mean, std)
+        transforms.ToTensor(),
+        transforms.Normalize(mean, std),
     ])
     
     train_dataset = datasets.CIFAR10(os.path.join(data_dir, "cifar-10"), train=True, transform=train_transforms, download=False)
@@ -103,7 +105,7 @@ def run(data_dir, device_list, batch_size, warmup_epochs, num_epochs):
     # MODEL
     model_kwargs = {
         "img_size": 32,
-        "patch_size": 2,
+        "patch_size": 4,
         "num_classes": 10,
         "embed_dim": 192,
         "depth": 12,
@@ -126,7 +128,7 @@ def run(data_dir, device_list, batch_size, warmup_epochs, num_epochs):
     print("Trainable parameters: {:d} ({:.1f}M)".format(n_params, n_params / 1e6))
     
     # OPTIM
-    base_lr = 0.001
+    base_lr = 0.005
     lr = base_lr * batch_size / 256
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=0.05)
     
@@ -165,13 +167,14 @@ def run(data_dir, device_list, batch_size, warmup_epochs, num_epochs):
 if __name__ == "__main__":
     data_dir = "/workspace/datasets"
     device_list = [0]
-    batch_size = 64
+    batch_size = 128
     warmup_epochs = 5
     num_epochs = 100
     run(data_dir, device_list, batch_size, warmup_epochs, num_epochs)
     
-    #  patch | [16, 16]
-    #    acc | 81.10%
+    #  batch | 128
+    #  patch | [8, 8]
+    #    acc | 81.6%
     # params | 5.4M
-    #   VRAM | 12.9 GB
-    #   time | 87 mins
+    #   VRAM | 7.05 GB
+    #   time | 89 mins

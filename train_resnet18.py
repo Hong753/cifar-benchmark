@@ -107,6 +107,9 @@ def run(data_dir, device_list, batch_size, num_epochs):
     elif len(device_list) > 1:
         model = torch.nn.DataParallel(model, device_ids=device_list)
     
+    n_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
+    print("Trainable parameters: {:d} ({:.1f}M)".format(n_params, n_params / 1e6))
+    
     # OPTIM
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4, nesterov=False)
     
@@ -142,8 +145,14 @@ def run(data_dir, device_list, batch_size, num_epochs):
 #----------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    data_dir = "/home/hong/datasets"
+    data_dir = "/workspace/datasets"
     device_list = [0]
     batch_size = 128
     num_epochs = 200
     run(data_dir, device_list, batch_size, num_epochs)
+    
+    #  batch | 128
+    #    acc | 95.5%
+    # params | 11.2M
+    #   VRAM | 1.91 GB
+    #   time | 33 mins
