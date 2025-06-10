@@ -121,7 +121,7 @@ def run(data_dir, device_list, use_fp16=False):
 if __name__ == "__main__":
     data_dir = "/workspace/datasets"
     device_list = [0]
-    run(data_dir, device_list, use_fp16=False)
+    run(data_dir, device_list, use_fp16=True)
     
     # VMamba-tiny (PyTorch-FP32)
     #   patch | [8, 8]
@@ -135,9 +135,9 @@ if __name__ == "__main__":
     #   patch | [8, 8]
     #     acc | 86.2%
     #  params | 1.7M
-    #    VRAM | 0.31 GB
-    # latency | 6.13 ms
-    #     fps | 163.20
+    #    VRAM | 0.17 GB
+    # latency | 4.56 ms
+    #     fps | 219.48
     
     # VMamba-tiny (TensorRT-FP16) => implement fp16 selective_scan
     #   patch | [8, 8]
