@@ -1,6 +1,12 @@
 *.pth
 **/__pycache__/
+**/*.egg-info
 .spyproject
 .code
 checkpoints
 images
+
+# Compiled source
+build
+x64
+*.so
