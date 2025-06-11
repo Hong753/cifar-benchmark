@@ -65,19 +65,6 @@ def run(data_dir, device_list, use_fp16=False):
     loader_kwargs = {"batch_size": 1, "num_workers": 4, "pin_memory": True}
     test_loader = get_loaders(data_dir, loader_kwargs)
     
-    # MODEL
-    model_kwargs = {
-        "img_size": 32,
-        "patch_size": 4,
-        "num_classes": 10,
-        "dims": [48, 96, 192, 384],
-        "tensorrt": True,
-    }
-    model = VSSM(**model_kwargs)
-    ckpt_path = "checkpoints/vssm_tiny.pth"
-    checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=True)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    
     # CUDA SETTINGS
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = True
@@ -85,24 +72,33 @@ def run(data_dir, device_list, use_fp16=False):
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     device = torch.device("cuda", device_list[0])
-    model = model.to(device)
-    if len(device_list) > 1:
-        model = torch.nn.DataParallel(model, device_ids=device_list)
-    
-    n_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
-    print("Trainable parameters: {:d} ({:.1f}M)".format(n_params, n_params / 1e6))
     
     # Compile with TensorRT
     dtype = torch.float32
     if use_fp16:
         dtype = torch.float16
-        model.half()
-    model.eval()
     
+    # MODEL
     model_ep_path = "checkpoints/vssm_tiny.ep"
     if os.path.exists(model_ep_path):
         trt_model = torch.export.load(model_ep_path).module()
     else:
+        model_kwargs = {
+            "img_size": 32,
+            "patch_size": 4,
+            "num_classes": 10,
+            "dims": [48, 96, 192, 384],
+            "tensorrt": True,
+        }
+        model = VSSM(**model_kwargs)
+        ckpt_path = "checkpoints/vssm_tiny.pth"
+        checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        model = model.to(device)
+        if use_fp16:
+            model.half()
+        model.eval()
+        
         trt_model = torch_tensorrt.compile(
             model,
             inputs=[torch.rand((1, 3, 32, 32), dtype=dtype, device=device)],

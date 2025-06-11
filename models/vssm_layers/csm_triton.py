@@ -557,7 +557,7 @@ class CrossMergeTritonF(torch.autograd.Function):
 
 
 # @torch.compile(options={"triton.cudagraphs": True}, fullgraph=True)
-# @torch.library.custom_op("torchtrt_ex::cross_scan", mutates_args=())
+@torch.library.custom_op("torchtrt_ex::cross_scan", mutates_args=())
 def cross_scan_fn(
         x: torch.Tensor,
         in_channel_first: bool = True,
@@ -576,14 +576,14 @@ def cross_scan_fn(
     else:
         return CrossScanF.apply(x, in_channel_first, out_channel_first, one_by_one, scans)
 
-# @torch.library.register_fake("torchtrt_ex::cross_scan")
-# def _(x):
-#     B, C, H, W = x.shape
-#     output_shape = (B, 4, C, H*W)
-#     return x.new_zeros(output_shape)
+@torch.library.register_fake("torchtrt_ex::cross_scan")
+def _(x):
+    B, C, H, W = x.shape
+    output_shape = (B, 4, C, H*W)
+    return x.new_zeros(output_shape)
 
 # @torch.compile(options={"triton.cudagraphs": True}, fullgraph=True)
-# @torch.library.custom_op("torchtrt_ex::cross_merge", mutates_args=())
+@torch.library.custom_op("torchtrt_ex::cross_merge", mutates_args=())
 def cross_merge_fn(
         y: torch.Tensor,
         in_channel_first: bool = True,
@@ -602,8 +602,8 @@ def cross_merge_fn(
     else:
         return CrossMergeF.apply(y, in_channel_first, out_channel_first, one_by_one, scans)
 
-# @torch.library.register_fake("torchtrt_ex::cross_merge")
-# def _(ys):
-#     B, K, C, H, W = ys.shape
-#     output_shape = (B, C, H*W)
-#     return ys.new_zeros(output_shape)
+@torch.library.register_fake("torchtrt_ex::cross_merge")
+def _(ys):
+    B, K, C, H, W = ys.shape
+    output_shape = (B, C, H*W)
+    return ys.new_zeros(output_shape)

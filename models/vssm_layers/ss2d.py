@@ -6,8 +6,8 @@ import torch.nn as nn
 from .mlp import Linear
 from .layer_norm import LayerNorm
 from .csm_triton import cross_scan_fn, cross_merge_fn
-from .csm import selective_scan_fn as selective_scan
-# from .selective_scan_trt import selective_scan
+# from .csm import selective_scan_fn as selective_scan
+from .selective_scan_trt import selective_scan
 
 #----------------------------------------------------------------------------
 

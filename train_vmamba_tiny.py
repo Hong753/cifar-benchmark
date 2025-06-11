@@ -168,10 +168,10 @@ if __name__ == "__main__":
     num_epochs = 100
     run(data_dir, device_list, batch_size, warmup_epochs, num_epochs)
     
-    # ViM-tiny
+    # VSSM-tiny
     #  batch | 128
     #  patch | [8, 8]
-    #    acc | 91.4%
-    # params | 1.7M
+    #    acc | 84%
+    # params | 7.4M
     #   VRAM | 0.91 GB
-    #   time | 48 mins
+    #   time | 36 mins
