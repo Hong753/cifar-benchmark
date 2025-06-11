@@ -70,7 +70,7 @@ def run(data_dir, device_list, use_fp16=False):
         "img_size": 32,
         "patch_size": 4,
         "num_classes": 10,
-        "dims": [96, 96, 96, 96],
+        "dims": [48, 96, 192, 384],
         "tensorrt": True,
     }
     model = VSSM(**model_kwargs)
@@ -98,13 +98,19 @@ def run(data_dir, device_list, use_fp16=False):
         dtype = torch.float16
         model.half()
     model.eval()
-    trt_model = torch_tensorrt.compile(
-        model,
-        inputs=[torch.rand((1, 3, 32, 32), dtype=dtype, device=device)],
-        ir="dynamo",
-        enabled_precisions={dtype},
-        debug=False,
-    )
+    
+    model_ep_path = "checkpoints/vssm_tiny.ep"
+    if os.path.exists(model_ep_path):
+        trt_model = torch.export.load(model_ep_path).module()
+    else:
+        trt_model = torch_tensorrt.compile(
+            model,
+            inputs=[torch.rand((1, 3, 32, 32), dtype=dtype, device=device)],
+            ir="dynamo",
+            enabled_precisions={dtype},
+            debug=False,
+        )
+        torch_tensorrt.save(trt_model, model_ep_path)
     # import pdb; pdb.set_trace()
     
     # RUN
@@ -121,7 +127,7 @@ def run(data_dir, device_list, use_fp16=False):
 if __name__ == "__main__":
     data_dir = "/workspace/datasets"
     device_list = [0]
-    run(data_dir, device_list, use_fp16=True)
+    run(data_dir, device_list, use_fp16=False)
     
     # VMamba-tiny (PyTorch-FP32)
     #   patch | [8, 8]

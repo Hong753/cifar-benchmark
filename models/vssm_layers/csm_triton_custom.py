@@ -337,6 +337,7 @@ def triton_cross_scan_flex(
     operation: tl.constexpr,
     onebyone: tl.constexpr,
     scans: tl.constexpr,
+    scan_route: tl.constexpr,
     BC: tl.constexpr,
     BH: tl.constexpr,
     BW: tl.constexpr,
@@ -371,7 +372,14 @@ def triton_cross_scan_flex(
         HWRoute3 = neg_w * DH + neg_h # trans + flip
     elif scans == 1:
         # none; none; none; none;
-        HWRoute0 = pos_h * DW + pos_w
+        if scan_route == 0:
+            HWRoute0 = pos_h * DW + pos_w
+        elif scan_route == 1:
+            HWRoute0 = pos_w * DH + pos_h # trans
+        elif scan_route == 2:
+            HWRoute0 = neg_h * DW + neg_w # flip
+        elif scan_route == 3:
+            HWRoute0 = neg_w * DH + neg_h # trans + flip
         HWRoute1 = HWRoute0
         HWRoute2 = HWRoute0
         HWRoute3 = HWRoute0
@@ -400,7 +408,7 @@ def triton_cross_scan_flex(
         p_y1 = y_ptr_base + HWRoute0 * 4 * DC
         p_y2 = y_ptr_base + DC + HWRoute1 * 4 * DC
         p_y3 = y_ptr_base + 2 * DC + HWRoute2 * 4 * DC
-        p_y4 = y_ptr_base + 3 * DC + HWRoute3 * 4 * DC
+        p_y4 = y_ptr_base + 3 * DC + HWRoute3 * 4 * DC       
     
     if onebyone == 0:
         x_ptr_base = x + i_b * _tmp1 + (i_c * BC * DH * DW if x_layout == 0 else i_c * BC)
@@ -461,7 +469,7 @@ def triton_cross_scan_flex(
 
 class CrossScanTritonF(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x: torch.Tensor, in_channel_first=True, out_channel_first=True, one_by_one=False, scans=0):
+    def forward(ctx, x: torch.Tensor, in_channel_first=True, out_channel_first=True, one_by_one=False, scans=0, scan_route=0):
         if one_by_one:
             if in_channel_first:
                 B, _, C, H, W = x.shape
@@ -480,13 +488,14 @@ class CrossScanTritonF(torch.autograd.Function):
         ctx.out_channel_first = out_channel_first
         ctx.one_by_one = one_by_one
         ctx.scans = scans
+        ctx.scan_route = scan_route
         ctx.shape = (B, C, H, W)
         ctx.triton_shape = (BC, BH, BW, NC, NH, NW)
 
         y = x.new_empty((B, 4, C, H * W)) if out_channel_first else x.new_empty((B, H * W, 4, C))
         triton_cross_scan_flex[(NH * NW, NC, B)](
             x.contiguous(), y, 
-            (0 if in_channel_first else 1), (0 if out_channel_first else 1), 0, (0 if not one_by_one else 1), scans, 
+            (0 if in_channel_first else 1), (0 if out_channel_first else 1), 0, (0 if not one_by_one else 1), scans, scan_route,
             BC, BH, BW, C, H, W, NH, NW
         )
         return y
@@ -497,6 +506,7 @@ class CrossScanTritonF(torch.autograd.Function):
         out_channel_first = ctx.out_channel_first
         one_by_one = ctx.one_by_one
         scans = ctx.scans
+        scan_route = ctx.scan_route
         B, C, H, W = ctx.shape
         BC, BH, BW, NC, NH, NW = ctx.triton_shape
         if one_by_one:
@@ -506,15 +516,15 @@ class CrossScanTritonF(torch.autograd.Function):
         
         triton_cross_scan_flex[(NH * NW, NC, B)](
             x, y.contiguous(), 
-            (0 if in_channel_first else 1), (0 if out_channel_first else 1), 1, (0 if not one_by_one else 1), scans,
+            (0 if in_channel_first else 1), (0 if out_channel_first else 1), 1, (0 if not one_by_one else 1), scans, scan_route,
             BC, BH, BW, C, H, W, NH, NW
         )
-        return x, None, None, None, None
+        return x, None, None, None, None, None
 
 
 class CrossMergeTritonF(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, y: torch.Tensor, in_channel_first=True, out_channel_first=True, one_by_one=False, scans=0):
+    def forward(ctx, y: torch.Tensor, in_channel_first=True, out_channel_first=True, one_by_one=False, scans=0, scan_route=0):
         if out_channel_first:
             B, _, C, H, W = y.shape
         else:
@@ -526,6 +536,7 @@ class CrossMergeTritonF(torch.autograd.Function):
         ctx.out_channel_first = out_channel_first
         ctx.one_by_one = one_by_one
         ctx.scans = scans
+        ctx.scan_route = scan_route
         ctx.shape = (B, C, H, W)
         ctx.triton_shape = (BC, BH, BW, NC, NH, NW)
         if one_by_one:
@@ -534,7 +545,7 @@ class CrossMergeTritonF(torch.autograd.Function):
             x = y.new_empty((B, C, H * W)) if in_channel_first else y.new_empty((B, H * W, C))
         triton_cross_scan_flex[(NH * NW, NC, B)](
             x, y.contiguous(), 
-            (0 if in_channel_first else 1), (0 if out_channel_first else 1), 1, (0 if not one_by_one else 1), scans,
+            (0 if in_channel_first else 1), (0 if out_channel_first else 1), 1, (0 if not one_by_one else 1), scans, scan_route,
             BC, BH, BW, C, H, W, NH, NW
         )
         return x
@@ -545,15 +556,16 @@ class CrossMergeTritonF(torch.autograd.Function):
         out_channel_first = ctx.out_channel_first
         one_by_one = ctx.one_by_one
         scans = ctx.scans
+        scan_route = ctx.scan_route
         B, C, H, W = ctx.shape
         BC, BH, BW, NC, NH, NW = ctx.triton_shape
         y = x.new_empty((B, 4, C, H, W)) if out_channel_first else x.new_empty((B, H, W, 4, C))
         triton_cross_scan_flex[(NH * NW, NC, B)](
             x.contiguous(), y, 
-            (0 if in_channel_first else 1), (0 if out_channel_first else 1), 0, (0 if not one_by_one else 1), scans,
+            (0 if in_channel_first else 1), (0 if out_channel_first else 1), 0, (0 if not one_by_one else 1), scans, scan_route,
             BC, BH, BW, C, H, W, NH, NW
         )
-        return y, None, None, None, None, None
+        return y, None, None, None, None, None, None
 
 
 # @torch.compile(options={"triton.cudagraphs": True}, fullgraph=True)
@@ -564,6 +576,7 @@ def cross_scan_fn(
         out_channel_first: bool = True,
         one_by_one: bool = False,
         scans: int = 0,
+        scan_route: int = 0,
         force_torch: bool = False,
     ) -> torch.Tensor:
     # x: (B, C, H, W) | (B, H, W, C) | (B, 4, C, H, W) | (B, H, W, 4, C)
@@ -572,7 +585,7 @@ def cross_scan_fn(
     CSF = CrossScanTritonF if WITH_TRITON and x.is_cuda and (not force_torch) else CrossScanF
     if x.is_cuda:
         with torch.cuda.device(x.device):
-            return CSF.apply(x, in_channel_first, out_channel_first, one_by_one, scans)
+            return CSF.apply(x, in_channel_first, out_channel_first, one_by_one, scans, scan_route)
     else:
         return CrossScanF.apply(x, in_channel_first, out_channel_first, one_by_one, scans)
 
@@ -590,6 +603,7 @@ def cross_merge_fn(
         out_channel_first: bool = True,
         one_by_one: bool = False,
         scans: int = 0,
+        scan_route: int = 0,
         force_torch: bool = False,
     ) -> torch.Tensor:
     # y: (B, 4, C, L) | (B, L, 4, C)
@@ -598,7 +612,7 @@ def cross_merge_fn(
     CMF = CrossMergeTritonF if WITH_TRITON and y.is_cuda and (not force_torch) else CrossMergeF
     if y.is_cuda:
         with torch.cuda.device(y.device):
-            return CMF.apply(y, in_channel_first, out_channel_first, one_by_one, scans)
+            return CMF.apply(y, in_channel_first, out_channel_first, one_by_one, scans, scan_route)
     else:
         return CrossMergeF.apply(y, in_channel_first, out_channel_first, one_by_one, scans)
 

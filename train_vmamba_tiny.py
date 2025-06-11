@@ -104,7 +104,8 @@ def run(data_dir, device_list, batch_size, warmup_epochs, num_epochs):
         "img_size": 32,
         "patch_size": 4,
         "num_classes": 10,
-        "dims": [96, 96, 96, 96]
+        "dims": [48, 96, 192, 384],
+        "drop_path_rate": 0.0,
     }
     model = VSSM(**model_kwargs)
     
@@ -172,5 +173,5 @@ if __name__ == "__main__":
     #  patch | [8, 8]
     #    acc | 91.4%
     # params | 1.7M
-    #   VRAM | 1.56 GB
+    #   VRAM | 0.91 GB
     #   time | 48 mins

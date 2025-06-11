@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from .mlp import Linear
 from .layer_norm import LayerNorm
-from .csm_triton import cross_scan_fn, cross_merge_fn
+from .csm_triton_custom import cross_scan_fn, cross_merge_fn
 from .csm import selective_scan_fn as selective_scan
 # from .selective_scan_trt import selective_scan
 
@@ -115,12 +115,15 @@ class SS2D(nn.Module):
             # ======================
             forward_type="v05_noz",
             channel_first=True,
+            scan_route=0,
             # ======================
             **kwargs,
         ):
         factory_kwargs = {"device": None, "dtype": None}
         super().__init__()
-        self.k_group = 4
+        assert scan_route in [0, 1, 2, 3]
+        self.scan_route = scan_route
+        self.k_group = 1
         self.d_model = int(d_model)
         self.d_state = int(d_state)
         self.d_inner = int(ssm_ratio * d_model)
@@ -236,7 +239,8 @@ class SS2D(nn.Module):
         # ==============================
         selective_scan_backend = None,
         # ==============================
-        scan_mode = "cross2d",
+        scan_mode = "unidi",
+        scan_route = 0,
         scan_force_torch = False,
         # ==============================
         **kwargs,
@@ -244,6 +248,7 @@ class SS2D(nn.Module):
         assert selective_scan_backend in [None, "oflex", "mamba", "torch"]
         _scan_mode = dict(cross2d=0, unidi=1, bidi=2, cascade2d=-1).get(scan_mode, None) if isinstance(scan_mode, str) else scan_mode # for debug
         assert isinstance(_scan_mode, int)
+        assert _scan_mode == 1 and scan_route in [0, 1, 2, 3]
         delta_softplus = True
         channel_first = self.channel_first
         to_fp32 = lambda *args: (_a.to(torch.float32) for _a in args)
@@ -258,7 +263,9 @@ class SS2D(nn.Module):
         #     return selective_scan_fn(u, delta, A, B, C, D, delta_bias, delta_softplus, ssoflex, backend=selective_scan_backend)
         
         if True:
-            xs = cross_scan_fn(x, in_channel_first=True, out_channel_first=True, scans=_scan_mode, force_torch=scan_force_torch)
+            # [B, C, h, w] -> [B, K=4, C, L]
+            xs = cross_scan_fn(x, in_channel_first=True, out_channel_first=True, scans=_scan_mode, scan_route=scan_route, force_torch=scan_force_torch)
+            xs = xs.sum(dim=1, keepdim=True) / 4
             x_dbl = self.x_proj(xs.view(B, -1, L))
             dts, Bs, Cs = torch.split(x_dbl.view(B, K, -1, L), [R, N, N], dim=2)
             dts = dts.contiguous().view(B, -1, L)
@@ -279,8 +286,10 @@ class SS2D(nn.Module):
                 xs, dts, As, Bs, Cs, Ds, delta_bias, delta_softplus
             ).view(B, K, -1, H, W)
             
-            y: torch.Tensor = cross_merge_fn(ys, in_channel_first=True, out_channel_first=True, scans=_scan_mode, force_torch=scan_force_torch)
-
+            # [B, K=4, C, h, w] -> [B, C, L]
+            ys = ys.repeat(1, 4, 1, 1, 1) / 4
+            y: torch.Tensor = cross_merge_fn(ys, in_channel_first=True, out_channel_first=True, scans=_scan_mode, scan_route=scan_route, force_torch=scan_force_torch)
+            
             # if getattr(self, "__DEBUG__", False):
             #     setattr(self, "__data__", dict(
             #         A_logs=self.A_logs, Bs=Bs, Cs=Cs, Ds=Ds,
@@ -306,7 +315,7 @@ class SS2D(nn.Module):
         if self.with_dconv:
             x = self.conv2d(x) # (b, d, h, w)
         x = self.act(x)
-        y = self.forward_core(x)
+        y = self.forward_core(x, scan_route=self.scan_route)
         y = self.out_act(y)
         if not self.disable_z:
             y = y * z
